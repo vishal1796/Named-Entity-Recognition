@@ -1,7 +1,7 @@
 import cPickle as pickle
 import numpy as np
 from data_util import *
-from crf import *
+from crf import CRF
 from keras.layers import Input
 from keras.utils import to_categorical
 from keras.layers.embeddings import Embedding
@@ -21,8 +21,8 @@ def my_init(shape, dtype=None):
     return K.random_uniform(shape, minval=-scale, maxval=scale, dtype=dtype)
 
 
-train_sentences = load_sentences('/data/eng.train')
-valid_sentences = load_sentences('/data/eng.testa')
+train_sentences = load_sentences('data/eng.train')
+valid_sentences = load_sentences('data/eng.testa')
 
 update_tag_scheme(train_sentences)
 update_tag_scheme(valid_sentences)
@@ -39,13 +39,22 @@ print "%i / %i  sentences in train / valid." % (len(train_data), len(valid_data)
 sentencelist_train, char_sequence_train, word_sequence_train, tag_sequence_train = build_X_Y(train_data)
 sentencelist_valid, char_sequence_valid, word_sequence_valid, tag_sequence_valid = build_X_Y(valid_data)
 
+char_embedding_dim = 30
+word_embedding_dim = 100
+lstm_dim = 200
+max_words = 50
+maxCharSize = 20 
+word_vocab_size = len(word_to_id)
+char_vocab_size = len(char_to_id)
+tag_label_size = len(tag_to_id)
+
 tags_train = []
 tags_valid = []
 
 for i in range(len(tag_sequence_train)):
-    tags_train.append(to_categorical(tag_sequence_train[i], 18))
+    tags_train.append(to_categorical(tag_sequence_train[i], tag_label_size))
 for i in range(len(tag_sequence_valid)):
-    tags_valid.append(to_categorical(tag_sequence_valid[i], 18))
+    tags_valid.append(to_categorical(tag_sequence_valid[i], tag_label_size))
     
 tags_train = np.array(tags_train)
 tags_valid = np.array(tags_valid)
@@ -57,19 +66,9 @@ print('char_sequence_valid shape:', char_sequence_valid.shape)
 print('word_sequence_valid shape:', word_sequence_valid.shape)
 print('tag_sequence_valid shape:', tag_sequence_valid.shape)
 
-pickle.dump(word_to_id, open("/output/word_to_id.pkl", 'wb'))
-pickle.dump(char_to_id, open("/output/char_to_id.pkl", 'wb'))
-pickle.dump(tag_to_id, open("/output/tag_to_id.pkl", 'wb'))
-
-char_embedding_dim = 30
-word_embedding_dim = 100
-lstm_dim = 200
-max_words = 50
-maxCharSize = 20 
-word_vocab_size = len(word_to_id)
-char_vocab_size = len(char_to_id)
-tag_label_size = len(tag_to_id)
-
+pickle.dump(word_to_id, open("output/word_to_id.pkl", 'wb'))
+pickle.dump(char_to_id, open("output/char_to_id.pkl", 'wb'))
+pickle.dump(tag_to_id, open("output/tag_to_id.pkl", 'wb'))
 
 print('Train...')
 char_input = Input(shape=(maxCharSize * max_words,), dtype='int32', name='char_input')
@@ -83,16 +82,15 @@ final_emb = Concatenate(axis=2, name='final_emb')([word_emb, char_max_pooling])
 emb_droput = Dropout(0.5)(final_emb)
 bilstm_word = Bidirectional(LSTM(200, kernel_initializer='glorot_uniform', return_sequences=True, unit_forget_bias=True))(emb_droput)
 bilstm_word_d = Dropout(0.5)(bilstm_word)
-dense = TimeDistributed(Dense(tag_label_size))(bilstm_word_d)
-crf = ChainCRF()
-crf_output = crf(dense)
+crf = CRF(tag_label_size, learn_mode='marginal', sparse_target=False, use_boundary = False)
+crf_output = crf(bilstm_word_d)
 
 model = Model(inputs=[char_input, word_input], outputs=crf_output)
 
 sgd = SGD(lr=0.015, decay=0.05, momentum=0.9, nesterov=False, clipvalue=5)
-model.compile(loss=crf.loss, optimizer=sgd, metrics=['accuracy'])
+model.compile(loss=crf.loss_function, optimizer=sgd, metrics=[crf.accuracy])
 
-filepath = "/output/weights-improvement-{epoch:02d}-{loss:.4f}.hdf5"
+filepath = "output/weights-improvement-{epoch:02d}-{loss:.4f}.hdf5"
 checkpoint = ModelCheckpoint(filepath, monitor='loss', verbose=1, save_best_only=True, mode='min')
 callbacks_list=[checkpoint]
 
@@ -101,9 +99,9 @@ model.fit([char_sequence_train, word_sequence_train], tags_train,
             batch_size=10, epochs=50, callbacks=callbacks_list)
 
 model_json = model.to_json()
-with open("/output/model_json.json", "w") as json_file:
+with open("output/model_json.json", "w") as json_file:
     json_file.write(model_json)
 
-model.save_weights("/output/full_model_weight.h5")
+model.save_weights("output/full_model_weight.h5")
 
-model.save('/output/bilstm-cnn-crf.h5')
+model.save('output/bilstm-cnn-crf.h5')

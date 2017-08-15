@@ -53,23 +53,6 @@ def update_tag_scheme(sentences):
                 continue
             else:  # conversion IOB1 to IOB2
                 tags[i] = 'B' + tag[1:]
-            
-        # new_tags = []
-        # for i, tag in enumerate(tags):
-        #     if tag == 'O':
-        #         new_tags.append(tag)
-        #     elif tag.split('-')[0] == 'B':
-        #         if i + 1 != len(tags) and \
-        #            tags[i + 1].split('-')[0] == 'I':
-        #             new_tags.append(tag)
-        #         else:
-        #             new_tags.append(tag.replace('B-', 'S-'))
-        #     elif tag.split('-')[0] == 'I':
-        #         if i + 1 < len(tags) and \
-        #                 tags[i + 1].split('-')[0] == 'I':
-        #             new_tags.append(tag)
-        #         else:
-        #             new_tags.append(tag.replace('I-', 'E-'))
                                 
         for word, new_tag in zip(sentence, tags):
             word[-1] = new_tag
